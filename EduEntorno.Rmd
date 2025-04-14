@@ -1,0 +1,1542 @@
+---
+title: "Indicadores regionales"
+author: ""
+date: ""
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard
+---
+
+```{r, message=FALSE, message=FALSE, include=FALSE,echo=FALSE}
+
+rm(list=ls())
+options(scipen = 999) 
+
+```
+
+```{r funciones, message=FALSE, message=FALSE, include=FALSE,echo=FALSE}
+
+#Agregar decimales
+
+specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall=k))
+
+```
+
+```{r, message=FALSE, include=FALSE, message=FALSE, echo=FALSE}
+library(shiny)
+library(flexdashboard)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(openxlsx)
+library(plotly)
+library(digitize)
+library(rsconnect)
+library(scales)
+library(here)
+
+```
+
+```{r Bases de datos, echo=FALSE, message=FALSE, include=FALSE}
+
+# region26 <- as_tibble(read.xlsx("D:/Manuel M/Minedu/02 Análisis/2022/TDR Oct-Dic/03 Indicadores regionales app/01 Bases/BD_regiones.xlsx", sheet = "Región26")) %>% 
+#   mutate(sb1=sb1*100,
+#          sb2=sb2*100,
+#          j2=j2/1000,
+#          bp1=bp1/1000000,
+#          bs1=bs1/1000000,
+#          mplect_2s_19=round(mplect_2s_19,0),
+#          mpmat_2s_19=round(mpmat_2s_19,0),
+#          mplect_4p_19=round(mplect_4p_19,0),
+#          mpmat_4p_19=round(mpmat_4p_19,0)) %>% 
+#   mutate(regnatural=factor(regnatural,
+#                            levels=c("Costa",
+#                                     "Sierra",
+#                                     "Selva"),
+#                            labels =c("Costa",
+#                                      "Sierra",
+#                                      "Selva")))
+
+here::here()
+
+region26 <- as_tibble(read.xlsx(here::here("01 Bases/BD_regiones.xlsx"), sheet = "Región26")) %>% 
+  mutate(sb1=sb1*100,
+         sb2=sb2*100,
+         j2=j2/1000,
+         bp1=bp1/1000000,
+         bs1=bs1/1000000,
+         mplect_2s_19=round(mplect_2s_19,0),
+         mpmat_2s_19=round(mpmat_2s_19,0),
+         mplect_4p_19=round(mplect_4p_19,0),
+         mpmat_4p_19=round(mpmat_4p_19,0)) %>% 
+  mutate(regnatural=factor(regnatural,
+                           levels=c("Costa",
+                                    "Sierra",
+                                    "Selva"),
+                           labels =c("Costa",
+                                     "Sierra",
+                                     "Selva")))
+
+```
+
+Sistema (gestión de la IIEE) 
+============================================================
+
+Esta sección muestra la distribución de IIEE y matrícula según el tipo de gestión a nivel regional. Los datos se muestran tanto para primaria como secundaria. $\color{red}{\text{La línea punteada de color rojo}}$, señala las regiones que se encuentran por encíma del 50% de IIEE y/o matrícula. $\color{blue}{\text{La línea punteada de color azul}}$, muestra las regiones que se encuentran por encima del 25% de IIEE y/o matrícula
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+sist1 <- region26 %>%
+  select(region,tescpriv_p:tmatpriv_p) %>% 
+  gather(key="estrato",value="valorp",2:3) %>% 
+  mutate(estrato=ifelse(estrato=="tescpriv_p","Porcentaje de IIEE privadas","Porcentaje de matrícula en IIEE privadas"))
+
+sist2 <- region26 %>%
+  select(region,tescpriv_s:tmatpriv_s) %>% 
+  gather(key="estrato",value="valors",2:3) %>% 
+  mutate(estrato=ifelse(estrato=="tescpriv_s","Porcentaje de IIEE privadas","Porcentaje de matrícula en IIEE privadas"))
+
+sistx <- left_join(sist1,sist2, by=c("region","estrato")) %>% 
+  mutate(valorp=ifelse(estrato=="Porcentaje de IIEE privadas",valorp*-1,valorp),
+         valors=ifelse(estrato=="Porcentaje de IIEE privadas",valors*-1,valors))
+
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE,echo=FALSE}
+
+fluidRow(
+  inputPanel(
+    selectInput("y0_input", 
+                label = "Indicador",
+                choices = c('Porcentaje de IIEE y matrícula Privada 2022 (Primaria)' = "valorp",
+                            'Porcentaje de IIEE y matrícula Privada 2022  (Secundaria)' = "valors"
+                ),
+                selected = "valorp"
+    )
+  )
+)
+
+
+renderPlot({
+  
+  ordena <- filter(sistx, estrato == "Porcentaje de IIEE privadas") %>% 
+    arrange(.data[[input$y0_input]]) %>% 
+    pull(region) %>% 
+    rev()
+  
+  sistxp <- mutate(sistx, region2 = factor(region, labels = ordena, levels = ordena)) %>% 
+    mutate(etiq=ifelse(.data[[input$y0_input]]<0,.data[[input$y0_input]]*-1,.data[[input$y0_input]])) %>% 
+    mutate(etiq2=paste0(specify_decimal(etiq*100,1),"%"))
+  
+  
+  sistxp %>% 
+    ggplot(aes(x=.data[[input$y0_input]], 
+               y= region2,fill=estrato)) +
+    geom_col() +
+    scale_x_continuous(limits = c(-1,1),
+                       n.breaks = 9) +
+    geom_vline(xintercept = 0) +
+    geom_vline(xintercept = -0.5,
+               linetype="dotted",
+               colour="#99000d",
+               size = 1) + 
+    geom_vline(xintercept = -0.25,
+               linetype="dotted",
+               colour="#084594",
+               size = 1) +
+    geom_vline(xintercept = 0.5,
+               linetype="dotted",
+               colour="#99000d",
+               size = 1) +
+    geom_vline(xintercept = 0.25,
+               linetype="dotted",
+               colour="#084594",
+               size = 1) +
+    geom_text(aes(label = etiq2,
+                  hjust=ifelse(.data[[input$y0_input]] > 0,-0.2,1.2),
+                  size=3)) +
+    theme_bw() +
+    theme(legend.position = "bottom",
+          legend.text = element_text(size=12),
+          legend.title = element_blank()) +
+    theme(axis.title = element_blank(),
+          axis.text.x = element_blank(),
+          axis.text.y = element_text(size=12))
+  
+}, height = 600 , width = 1200)
+
+```
+
+Sistema (área de la IIEE) 
+============================================================
+
+Esta sección muestra la distribución de IIEE y matrícula según el área geográfica a nivel regional. Los datos se muestran tanto para primaria como secundaria. $\color{red}{\text{La línea punteada de color rojo}}$, señala las regiones que se encuentran por encíma del 50% de IIEE y/o matrícula. $\color{blue}{\text{La línea punteada de color azul}}$, muestra las regiones que se encuentran por encima del 25% de IIEE y/o matrícula
+
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+sistrur1 <- region26 %>%
+  select(region,tescrural_p:tmatrural_p) %>% 
+  gather(key="estrato",value="valorp",2:3) %>% 
+  mutate(estrato=ifelse(estrato=="tescrural_p","Porcentaje de IIEE rurales","Porcentaje de matrícula en IIEE rurales"))
+
+sistrur2 <- region26 %>%
+  select(region,tescrural_s:tmatrural_s) %>% 
+  gather(key="estrato",value="valors",2:3) %>% 
+  mutate(estrato=ifelse(estrato=="tescrural_s","Porcentaje de IIEE rurales","Porcentaje de matrícula en IIEE rurales"))
+
+sistrurx <- left_join(sistrur1,sistrur2, by=c("region","estrato")) %>% 
+  mutate(valorp=ifelse(estrato=="Porcentaje de IIEE rurales",valorp*-1,valorp),
+         valors=ifelse(estrato=="Porcentaje de IIEE rurales",valors*-1,valors))
+
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE,echo=FALSE}
+
+fluidRow(
+  inputPanel(
+    selectInput("yrur_input", 
+                label = "Indicador",
+                choices = c('Porcentaje de IIEE y matrícula rural 2022 (Primaria)' = "valorp",
+                            'Porcentaje de IIEE y matrícula rural 2022  (Secundaria)' = "valors"
+                ),
+                selected = "valorp"
+    )
+  )
+)
+
+
+renderPlot({
+  
+  ordena <- filter(sistrurx, estrato == "Porcentaje de IIEE rurales") %>% 
+    arrange(.data[[input$yrur_input]]) %>% 
+    pull(region) %>% 
+    rev()
+  
+  sistrurxp <- mutate(sistrurx, region2 = factor(region, labels = ordena, levels = ordena)) %>% 
+    mutate(etiq=ifelse(.data[[input$yrur_input]]<0,.data[[input$yrur_input]]*-1,.data[[input$yrur_input]])) %>% 
+    mutate(etiq2=paste0(specify_decimal(etiq*100,1),"%"))
+  
+  
+  sistrurxp %>% 
+    ggplot(aes(x=.data[[input$yrur_input]], 
+               y= region2,fill=estrato)) +
+    geom_col() +
+    scale_x_continuous(limits = c(-1,1),
+                       n.breaks = 9) +
+    geom_vline(xintercept = 0) +
+    geom_vline(xintercept = -0.5,
+               linetype="dotted",
+               colour="#99000d",
+               size = 1) + 
+    geom_vline(xintercept = -0.25,
+               linetype="dotted",
+               colour="#084594",
+               size = 1) +
+    geom_vline(xintercept = 0.5,
+               linetype="dotted",
+               colour="#99000d",
+               size = 1) +
+    geom_vline(xintercept = 0.25,
+               linetype="dotted",
+               colour="#084594",
+               size = 1) +
+    geom_text(aes(label = etiq2,
+                  hjust=ifelse(.data[[input$yrur_input]] > 0,-0.2,1.2),
+                  size=3)) +
+    theme_bw() +
+    theme(legend.position = "bottom",
+          legend.text = element_text(size=12),
+          legend.title = element_blank()) +
+    theme(axis.title = element_blank(),
+          axis.text.x = element_blank(),
+          axis.text.y = element_text(size=12))
+  
+}, height = 600 , width = 1200)
+
+```
+
+Económicos
+============================================================
+
+Esta sección muestra información de variables económicas de cada región. Las variables consideradas son: **1) Ingreso real per cápita 2021 (soles); 2) gasto real per cápita 2021 (soles); 3) PBI real per-cápita 2021 (soles); e 4) ingreso promedio proveniente del trabajo 2020 (soles)**.
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+econ <- region26 %>%
+  select(region,eco1:eco4)
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE,echo=FALSE}
+
+fluidRow(
+  inputPanel(
+    selectInput("y1_input", 
+                label = "Indicador",
+                choices = c('Ingreso real per capita 2021 (Soles)' = "eco1",
+                            'Gasto real per capita 2021 (Soles)' = "eco2",
+                            'PBI real per capita 2021 (Soles)' = "eco3",
+                            'Ingreso promedio proveniente del trabajo 2020 (Soles)' = "eco4"
+                ),
+                selected = "eco1"
+    )
+  )
+)
+
+
+renderPlot({
+  
+  econ %>%
+    mutate(region2 = fct_reorder(region, .data[[input$y1_input]], .desc=FALSE)) %>%
+    ggplot(aes_string(x ="region2",
+                      y = input$y1_input))  +
+    geom_bar(stat="identity",
+             fill="#2ca25f") +
+    geom_text(aes(label=round(.data[[input$y1_input]],0),
+                  hjust=-0.1),
+              size=4.5) +
+    theme_bw(base_size = 15) +
+    scale_y_continuous(n.breaks=9) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=15),
+          axis.text.y = element_text(size=13.5)) +
+    coord_flip()
+  
+  
+  
+  
+}, height = 600 , width = 1200)
+
+```
+
+Sociales
+============================================================
+
+Esta sección muestra información de variables económicas de cada región. Las variables consideradas son: **1) índice de Desarrollo Humano 2019; 2) incidencia de pobreza 2021 (% de habitantes); 3) aumento en la incidencia de pobreza en el periodo 2020-2019; 4) reducción en la incidencia de pobreza en el periodo 2021-2020; 5) índice global del hambre (IGH) 2021; y 6) Incidencia de pobreza multidimensional 2020 (% de habitantes)**
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+soc <- region26 %>%
+  select(region,eco5:eco10) %>% 
+  mutate(eco8=eco8*-1)
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE,echo=FALSE}
+
+inputPanel(
+  selectInput("y2_input", 
+              label = "Indicador",
+              choices = c('Índice de Desarrollo Humano - IDH 2019' = "eco5",
+                          'Incidencia de pobreza a nivel regional 2021 (% de habitantes)' = "eco6",
+                          'Aumento en la incidencia de pobreza 20/19' = "eco7",
+                          'Reducción en la incidencia de pobreza 21/20' = "eco8",
+                          'Índice global del hambre - IGH 2021' = "eco9",
+                          'Incidencia de pobreza multidimensional 2020 (% de habitantes)' = "eco10"
+              ),
+              selected = "eco5"
+  )
+)
+
+renderPlot({
+  
+  soc %>%
+    mutate(region2 = fct_reorder(region, .data[[input$y2_input]], .desc=FALSE)) %>% 
+    ggplot(aes_string(x ="region2",
+                      y = input$y2_input))  +
+    geom_bar(stat="identity",
+             fill="#2ca25f") +
+    geom_text(aes(label=round(.data[[input$y2_input]],2),
+                  hjust=-0.2),
+              size=4.5) +
+    theme_bw(base_size = 15) +
+    scale_y_continuous(n.breaks=9) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=15),
+          axis.text.y = element_text(size=13.5)) +
+    coord_flip()
+  
+  
+  
+}, height = 600 , width = 1200)
+
+```
+
+Carencias de las IIEE
+==============================================
+
+Esta sección muestra información de la proporción de escuelas que cuentan con los servicios de luz, agua y desagüe conectados a una red pública, así como indicadores relacionados a la brecha de infraestructura. Las variables consideradas son: **1) porcentaje de IIEE de nivel primaria con 3 servicios básicos (2022); 2) porcentaje de IIEE de nivel secundaria con 3 servicios básicos (2022); 3) brecha de infraestructura en primaria (millones de soles); y 4) brecha de infraestructura en secundaria (millones de soles).**
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+infra <- region26 %>%
+  select(region,sb1:bs1,escint_p:estint_s)
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+
+inputPanel(
+  selectInput("y3_input",
+              label = "Indicador",
+              choices = c('IIEE de nivel primaria con 3 servicios básicos (%)' = "sb1",
+                          'Total de la brecha de infraestructura en primaria en millones de soles (2021)' = "bp1",
+                          'Total de IIEE de primaria con conexión a internet (%)' = "escint_p",
+                          'Total de estudiantes de primaria con conexión a internet en sus hogares (%)' = "estint_p",
+                          'IIEE de nivel secundaria con 3 servicios básicos (%)' = "sb2",
+                          'Total de la brecha de infraestructura en secundaria en millones de soles (2021)' = "bs1",
+                          'Total de IIEE de secundaria con conexión a internet (%)' = "escint_s",
+                          'Total de estudiantes de secundaria con conexión a internet en sus hogares (%)' = "estint_s"
+              ),
+              selected = "sb1"
+  )
+)
+
+renderPlot({
+  
+  infra %>%
+    mutate(region2 = fct_reorder(region, .data[[input$y3_input]], .desc=FALSE)) %>%
+    mutate(etiq2=ifelse(.data[[input$y3_input]]<101,paste0(specify_decimal(.data[[input$y3_input]],1),"%"),specify_decimal(.data[[input$y3_input]],0))) %>% 
+    ggplot(aes_string(x ="region2",
+                      y = (input$y3_input))) +
+    geom_bar(stat="identity",
+             fill="#2ca25f") +
+    geom_text(aes(label=etiq2,
+                  hjust=-0.1),
+              size=4.5) +
+    theme_bw(base_size = 15) +
+    scale_y_continuous(n.breaks=9) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=15),
+          axis.text.y = element_text(size=13.5)) +
+    coord_flip()
+  
+} , height = 590 , width = 1200)
+```
+
+Distribución Gasto educativo
+==============================================
+
+Esta sección muestra la distribución del gasto en educación que hicieron las regiones en el año **2021** según tres componentes:
+
+* Proporción de gasto destinado a remuneraciones de docentes (2021)
+* Proporción de gastos destinado a conceptos administrativos como mantenimiento, alquiler y/o compra de bienes y servicios (2021)
+* Proporción de gastos destinado a remuneraciones de otro tipo de personal (limpieza, administrativos) (2021)
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+gasted <- region26 %>%
+  select(region,gas1,gas2,gas3) %>%
+  gather(key="var", value="porcent",2:4) %>%
+  mutate(tipo=ifelse(var=="gas1","En personal",
+                     ifelse(var=="gas2","En docentes","En administración"))) %>% 
+  mutate(tipo = factor(tipo,
+                       levels = c("En docentes","En personal", "En administración"), 
+                       labels = c("En docentes","En personal", "En administración")))
+
+
+```
+
+```{r}
+
+inputPanel(
+  selectInput("y4_input",
+              label = "Indicador",
+              choices = c('Distribución del gasto (%)' = "porcent"
+              ),
+              selected = "porcent"
+  )
+)
+
+renderPlot({
+  
+  ggplot(gasted,aes(x =region,
+                    y = (porcent))) +
+    geom_bar(stat="identity", 
+             fill="#2ca25f",
+             width = 0.8) +
+    geom_text(aes(label=round(porcent,1),
+                  hjust=-0.1),
+              size=4.5) +
+    facet_wrap(vars(tipo),
+               scales="free") +
+    scale_x_discrete(limits=rev) +
+    scale_y_continuous(limits=c(0, 100)) +
+    theme_bw(base_size = 18) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=12),
+          axis.text.y = element_text(20)) +
+    coord_flip()
+  
+} , height = 590 , width = 1500)
+```
+
+Conectividad en centros poblados
+==============================================
+
+Esta sección muestra la cantidad de centros poblados según el tipo de conexión a **internet movil** con el que cuentan al año 2021. Los indicadores son: **1) porcentaje de centros poblados que cuentan con tecnología de internet movil de 4G (2021); 2) porcentaje de centros poblados que cuentan a lo más con tecnología de internet movil de 3G (2021); y 3) porcentaje de centros poblados que cuentan a lo más con tecnología de internet movil de 2G (2021)**
+
+```{r}
+conect <- region26 %>%
+  select(region,pit4g,pit3g,pit2g) %>% 
+  gather(key="var", value="porcent",2:4) %>%
+  mutate(tipo=ifelse(var=="pit4g","Movil 4G",
+                     ifelse(var=="pit3g","A lo más movil 3G","A lo más movil 2G"))) %>% 
+  mutate(tipo = factor(tipo,
+                       levels = c("Movil 4G","A lo más movil 3G", "A lo más movil 2G"), 
+                       labels = c("Movil 4G","A lo más movil 3G", "A lo más movil 2G")))
+
+```
+
+```{r}
+inputPanel(
+  selectInput("y5_input",
+              label = "Indicador",
+              choices = c('Tecnología de internet movil en centros poblados' = "porcent"),
+              selected = "pit4g"
+  )
+)
+
+renderPlot({
+  
+  ggplot(conect,aes(x =region,
+                    y = (porcent))) +
+    geom_bar(stat="identity", 
+             fill="#2ca25f",
+             width = 0.8) +
+    geom_text(aes(label=round(porcent,1),
+                  hjust=-0.1),
+              size=4.5) +
+    facet_wrap(vars(tipo),
+               scales="free") +
+    scale_x_discrete(limits=rev) +
+    scale_y_continuous(limits=c(0, 100)) +
+    theme_bw(base_size = 18) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=12)) +
+    coord_flip()
+  
+  
+} , height = 550 , width = 1500)
+```
+
+Programas sociales
+==============================================
+
+Esta sección muestra información relacionada a la implementación de programas sociales en las regiones. Las variables consideradas son: **1) efectividad de la cobertura del programa juntos en la región (Hogares abonados/Hogares afiliados (2021); 2) transferencia monetaria de juntos 2021 (en miles de soles); 3) total de IIEE de primaria que reciben Qaliwarma (2021); 4) total de estudiantes de primaria que reciben Qaliwarma (2021); 5) total de IIEE de secundaria que reciben Qaliwarma (2021); y 6) total de estudiantes de secundaria que reciben Qaliwarma (2021)** 
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+progs <- region26 %>%
+  select(region,j1,j2:qs2)
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+
+inputPanel(
+  selectInput("y6_input",
+              label = "Indicador",
+              choices = c('Efectividad de la cobertura del programa juntos en la región (2021)' = "j1",
+                          'Transferencia monetaria de juntos 2021 (en miles de soles)' = "j2",
+                          'Total de IIEE de primaria que reciben Qaliwarma (2021)' = "qp1",
+                          'Total de estudiantes de primaria que reciben Qaliwarma (2021)' = "qp2",
+                          'Total de IIEE de secundaria que reciben Qaliwarma (2021)' = "qs1",
+                          'Total de estudiantes de secundaria que reciben Qaliwarma (2021)' = "qs2"),
+              selected = "j1"
+  )
+)
+
+renderPlot({
+  
+  progs %>%
+    mutate(region2 = fct_reorder(region, .data[[input$y6_input]], .desc=FALSE)) %>%
+    ggplot(aes_string(x ="region2",
+                      y = (input$y6_input))) +
+    geom_bar(stat="identity",
+             fill="#2ca25f") +
+    geom_text(aes(label=round(.data[[input$y6_input]],2),
+                  hjust=-0.1),
+              size=4.5)  +
+    theme_bw(base_size = 15) +
+    scale_y_continuous(n.breaks=9) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=15)) +
+    coord_flip()
+  
+}, height = 550 , width = 1500)
+
+```
+
+Gasto por alumno
+==============================================
+
+Esta sección muestra información sobre el gasto por alumno que realizan las regiones. Se diferencia la información por niveles educativos de primaria y secundaria. Los datos corresponden al **año 2021** y se expresan en soles.
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+gxa <- region26 %>%
+  select(region,p1,s1)
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+
+inputPanel(
+  selectInput("y7_input",
+              label = "Indicador",
+              choices = c('Gasto por alumno en primaria en 2021 (soles)' = "p1",
+                          'Gasto por alumno en secundaria en 2021 (soles)' = "s1"              ),
+              selected = "p1"
+  )
+)
+
+renderPlot({
+  
+  gxa %>%
+    mutate(region2 = fct_reorder(region, .data[[input$y7_input]], .desc=FALSE)) %>%
+    ggplot(aes_string(x ="region2",
+                      y = (input$y7_input))) +
+    geom_bar(stat="identity",
+             fill="#2ca25f") +
+    geom_text(aes(label=round(.data[[input$y7_input]],0),
+                  hjust=-0.1),
+              size=4.5)  +
+    theme_bw(base_size = 15) +
+    scale_y_continuous(n.breaks=9) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=15),
+          axis.text.y = element_text(size=13.5)) +
+    coord_flip()
+  
+} , height = 550 , width = 1200)
+```
+
+Trayectoria educativa
+==============================================
+
+Esta sección muestra información relacionada a la trayectoria educativa de los estudiantes. Los datos se diferencian por niveles educativos de primaria y secundaria. Las variables consideradas son: **1) porcentaje de estudiantes repetidores en primaria (2021); 2) porcentaje de estudiantes con atraso escolar en primaria (2021); 3) ratio de alumnos por docente en primaria (2021); 4) tamaño promedio de clase en primaria (2021); 5) porcentaje de estudiantes repetidores en secundaria (2021) ; 6) porcentaje de estudiantes con atraso escolar en secundaria (2021) ; 7) ratio de alumnos por docente en secundaria (2021) ; y 8) tamaño promedio de clase en secundaria (2021). **
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+trayec <- region26 %>%
+  select(region,cp1:cs4)
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+
+inputPanel(
+  selectInput("y8_input",
+              label = "Indicador",
+              choices = c('Porcentaje de estudiantes repetidores en primaria (2021)' = "cp1",
+                          'Porcentaje de estudiantes con atraso escolar en primaria (2021)' = "cp2",
+                          'Ratio de alumnos por docente en primaria (2021)' = "cp3",
+                          'Tamaño promedio de clase en primaria (2021)' = "cp4",
+                          'Porcentaje de estudiantes repetidores en secundaria (2021)' = "cs1",
+                          'Porcentaje de estudiantes con atraso escolar en secundaria (2021)' = "cs2",
+                          'Ratio de alumnos por docente en secundaria (2021)' = "cs3",
+                          'Tamaño promedio de clase en secundaria (2021)' = "cs4"
+              ),
+              selected = "cp1"
+  )
+)
+
+renderPlot({
+  
+  trayec %>%
+    mutate(region2 = fct_reorder(region, .data[[input$y8_input]], .desc=FALSE)) %>%
+    ggplot(aes_string(x ="region2",
+                      y = (input$y8_input))) +
+    geom_bar(stat="identity",
+             fill="#2ca25f") +
+    geom_text(aes(label=round(.data[[input$y8_input]],2),
+                  hjust=-0.1),
+              size=4.5)  +
+    theme_bw(base_size = 15) +
+    scale_y_continuous(n.breaks=9) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=15),
+          axis.text.y = element_text(size=13.5)) +
+    coord_flip()
+  
+} , height = 550 , width = 1200)
+```
+
+SIDI: Entrega tablets
+==============================================
+
+Esta sección muestra el avance en la entrega de tablets al **28 de diciembre del 2022** a nivel regional y nivel educativo (primaria y secundaria). Específicamente: **1) el porcentaje de IIEE focalizadas que cuentan con 100% de tablets entregadas; y 2) el porcentaje de IIEE focalizadas que no cuentan con ninguna tablet (0%)** 
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+tablet_p <- region26 %>%
+  select(region,tabl100_p,tabl0_p) %>%
+  gather(key="var", value="porcent_p",2:3) %>%
+  mutate(tipo=ifelse(var=="tabl100_p","Porcentaje de IIEE focalizadas con 100% de tablet","Porcentaje de IIEE focalizadas con 0% tablet")) %>% 
+  mutate(tipo = factor(tipo,
+                       levels = c("Porcentaje de IIEE focalizadas con 100% de tablet", "Porcentaje de IIEE focalizadas con 0% tablet"), 
+                       labels = c("Porcentaje de IIEE focalizadas con 100% de tablet", "Porcentaje de IIEE focalizadas con 0% tablet"))) %>% 
+  select(region,tipo,porcent_p)
+
+tablet_s <- region26 %>%
+  select(region,tabl100_s,tabl0_s) %>%
+  gather(key="var", value="porcent_s",2:3) %>%
+  mutate(tipo=ifelse(var=="tabl100_s","Porcentaje de IIEE focalizadas con 100% de tablet","Porcentaje de IIEE focalizadas con 0% tablet")) %>% 
+  mutate(tipo = factor(tipo,
+                       levels = c("Porcentaje de IIEE focalizadas con 100% de tablet", "Porcentaje de IIEE focalizadas con 0% tablet"), 
+                       labels = c("Porcentaje de IIEE focalizadas con 100% de tablet", "Porcentaje de IIEE focalizadas con 0% tablet"))) %>% 
+  select(region,tipo,porcent_s)
+
+tablet_t <- left_join(tablet_p,tablet_s,by=c("region","tipo"))
+
+
+```
+
+```{r}
+
+inputPanel(
+  selectInput("ytablet_input",
+              label = "Indicador",
+              choices = c('Porcentaje de IIEE focalizadas según estatus de recepción de tablet (Primaria)' = "porcent_p",
+                          'Porcentaje de IIEE focalizadas según estatus de recepción de tablet (Secundaria)' = "porcent_s"
+              ),
+              selected = "porcent_p"
+  )
+)
+
+renderPlot({
+  
+  ordena <- filter(tablet_t, tipo == "Porcentaje de IIEE focalizadas con 100% de tablet") %>% 
+    arrange(.data[[input$ytablet_input]]) %>% 
+    pull(region) %>% 
+    rev()
+  
+  tablet_t2 <- mutate(tablet_t, region2 = factor(region, labels = ordena, levels = ordena)) %>%
+    mutate(etiq2=paste0(specify_decimal(.data[[input$ytablet_input]],1),"%"))
+  
+  ggplot(tablet_t2,aes_string(x ="region2",
+                              y = (input$ytablet_input))) +
+    geom_bar(stat="identity",
+             fill="#2ca25f",
+             width = 0.8) +
+    facet_wrap(vars(tipo),
+               scale="free") +
+    theme(strip.text.x = element_text(size = 15)) +
+    geom_text(aes(label=etiq2,
+                  hjust=-0.1),
+              size=4.5)  +
+    theme_bw(base_size = 20) + 
+    scale_x_discrete(limits=rev) +
+    scale_y_continuous(limits=c(0, 110)) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=12),
+          axis.text.y = element_text(15)) +
+    coord_flip()
+  
+} , height = 550 , width = 1500)
+
+```
+
+SIDI: Materiales educativos
+==============================================
+
+Esta sección muestra el avance en la entrega de materiales educativos al **28 de diciembre del 2022** a nivel regional y nivel educativo (primaria y secundaria). Específicamente: **1) porcentaje de IIEE que cuentan con cuadernos de trabajo suficientes; y 2) porcentaje de IIEE que cuentan con kit de evaluación suficientes** 
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+mater_t <- region26 %>%
+  select(region,ct_p:kit_s)
+
+
+```
+
+```{r}
+
+inputPanel(
+  selectInput("ymater_input",
+              label = "Indicador",
+              choices = c('Porcentaje de IIEE con cuadernos de trabajo suficientes (Primaria)' = "ct_p",
+                          'Porcentaje de IIEE con kit de evaluación suficientes (Primaria)' = "kit_p",
+                          'Porcentaje de IIEE con cuadernos de trabajo suficientes (Secundaria)' = "ct_s",
+                          'Porcentaje de IIEE con kit de evaluación suficientes (Secundaria)' = "kit_s"
+              ),
+              selected = "ct_p"
+  )
+)
+
+renderPlot({
+  
+  
+  mater_t %>% 
+    mutate(region2 = fct_reorder(region, .data[[input$ymater_input]], .desc=FALSE)) %>% 
+    ggplot(aes_string(x ="region2",
+                      y = (input$ymater_input))) +
+    geom_bar(stat="identity",
+             fill="#2ca25f") +
+    geom_text(aes(label=round(.data[[input$ymater_input]],2),
+                  hjust=-0.1),
+              size=4.5) +
+    theme_bw(base_size = 20) +
+    scale_y_continuous(limits=c(0, 100),
+                       n.breaks=9) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=15)) +
+    coord_flip()
+  
+} , height = 550 , width = 1500)
+
+```
+
+
+
+Docente: Sexo
+==============================================
+
+Esta sección muestra información sobre la distribución de docentes en las regiones según su sexo. Los datos pertenecen a la Encuesta Nacional de Docentes (ENDO) 2021. La información presentada corresponde a los niveles educativos de primaria y secundaria.
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+docsxp <- region26 %>%
+  select(region,Hombre=dp1,Mujer=dp2) %>% 
+  gather(key="tipo",value="porcentp",2:3) 
+
+docsxs <- region26 %>%
+  select(region,Hombre=ds1,Mujer=ds2) %>% 
+  gather(key="tipo",value="porcents",2:3) 
+
+docsx <- left_join(docsxp,docsxs,by=c("region","tipo"))
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+
+inputPanel(
+  selectInput("y9_input",
+              label = "Indicador",
+              choices = c('Distribución de docentes según su sexo en primaria, 2021' = "porcentp",
+                          'Distribución de docentes según su sexo en secundaria, 2021' = "porcents"
+              ),
+              selected = "porcentp"
+  )
+)
+
+renderPlot({
+  
+  ggplot(docsx,aes_string(x ="region",
+                          y = (input$y9_input))) +
+    geom_bar(stat="identity",
+             fill="#2ca25f",
+             width = 0.8) +
+    facet_wrap(vars(tipo),
+               scale="free") +
+    theme(strip.text.x = element_text(size = 15)) +
+    geom_text(aes(label=round(.data[[input$y9_input]],2),
+                  hjust=-0.1),
+              size=4.5)  +
+    theme_bw(base_size = 20) + 
+    scale_x_discrete(limits=rev) +
+    scale_y_continuous(limits=c(0, 100)) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=12),
+          axis.text.y = element_text(15)) +
+    coord_flip()
+  
+} , height = 550 , width = 1200)
+
+```
+
+Docente: Edad
+==============================================
+
+Esta sección muestra información sobre la edad promedio de los docentes según región. Los datos pertenecen a la Encuesta Nacional de Docentes (ENDO) 2021. La información presentada corresponde a los niveles educativos de primaria y secundaria.
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+docedad <- region26 %>%
+  select(region,dp3,ds3)
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+
+inputPanel(
+  selectInput("y10_input",
+              label = "Indicador",
+              choices = c('Promedio de edad de los docentes en primaria, 2021' = "dp3",
+                          'Promedio de edad de los docentes en secundaria, 2021' = "ds3"
+              ),
+              selected = "dp3"
+  )
+)
+
+renderPlot({
+  
+  docedad %>% 
+    mutate(region2 = fct_reorder(region, .data[[input$y10_input]], .desc=FALSE)) %>% 
+    ggplot(aes_string(x ="region2",
+                      y = (input$y10_input))) +
+    geom_bar(stat="identity",
+             fill="#2ca25f") +
+    geom_text(aes(label=round(.data[[input$y10_input]],2),
+                  hjust=-0.1),
+              size=4.5) +
+    theme_bw(base_size = 20) +
+    scale_y_continuous(limits=c(0, 65),
+                       n.breaks=9) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=15)) +
+    coord_flip()
+  
+} , height = 580 , width = 1200)
+```
+
+Docente: Escala Magisterial
+==============================================
+
+Esta sección muestra información sobre la distribución de los docentes según su escala magisterial en las regiones. Los datos pertenecen a la Encuesta Nacional de Docentes (ENDO) 2021. La información presentada corresponde a los niveles educativos de primaria y secundaria.
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+docemp <- region26 %>%
+  select(region,escala1=dp5_1,escala2=dp5_2,escala3=dp5_3,escala4=dp5_4,escala5=dp5_5,escala6=dp5_6,escala7=dp5_7) %>% 
+  mutate(total=escala1+escala2+escala3+escala4+escala5+escala6+escala7) %>% 
+  mutate(escala1=round(escala1/total*100,2),
+         escala2=round(escala2/total*100,2),
+         escala3=round(escala3/total*100,2),
+         escala4=round(escala4/total*100,2),
+         escala5=round(escala5/total*100,2),
+         escala6=round(escala6/total*100,2),
+         escala7=round(escala7/total*100,2)) %>% 
+  gather(key="tipo",value="porcentp",2:8)
+
+docems <- region26 %>%
+  select(region,escala1=ds5_1,escala2=ds5_2,escala3=ds5_3,escala4=ds5_4,escala5=ds5_5,escala6=ds5_6,escala7=ds5_7) %>% 
+  mutate(total=escala1+escala2+escala3+escala4+escala5+escala6+escala7) %>% 
+  mutate(escala1=round(escala1/total*100,2),
+         escala2=round(escala2/total*100,2),
+         escala3=round(escala3/total*100,2),
+         escala4=round(escala4/total*100,2),
+         escala5=round(escala5/total*100,2),
+         escala6=round(escala6/total*100,2),
+         escala7=round(escala7/total*100,2)) %>% 
+  gather(key="tipo",value="porcents",2:8) 
+
+docem <- left_join(docemp,docems, by=c("region","tipo"))
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+
+inputPanel(
+  selectInput("y11_input",
+              label = "Indicador",
+              choices = c('Distribución de docentes según escala magisterial en primaria, 2021' = "porcentp",
+                          'Distribución de docentes según escala magisterial en secundaria, 2021' = "porcents"
+              ),
+              selected = "porcentp"
+  )
+)
+
+renderPlot({
+  
+  ggplot(docem,aes_string(x ="region",
+                          y = (input$y11_input))) +
+    geom_bar(stat="identity",
+             fill="#2ca25f",
+             width = 0.8) +
+    facet_wrap(vars(tipo),
+               scales="fixed",
+               ncol=7,
+               nrow=1) +
+    theme(strip.text.x = element_text(size = 15)) +
+    geom_text(aes(label=round(.data[[input$y11_input]],1),
+                  hjust=-0.1),
+              size=4.5) + 
+    theme_bw(base_size = 20) + 
+    scale_x_discrete(limits=rev) +
+    scale_y_continuous(limits=c(0, 100)) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=12)) +
+    coord_flip()
+  
+} , height = 600 , width = 1800)
+```
+
+Docente: Situaciones pandemia
+==============================================
+
+Esta sección muestra información sobre el reporte de los docentes acerca de la incidencia de situaciones derivadas de la pandemia que afrontaron. Los datos pertenecen a la Encuesta Nacional de Docentes (ENDO) 2021. La información presentada corresponde a los niveles educativos de primaria y secundaria. Las situaciones cosideradas son: **1) Alguien en su hogar enfermó de Covid-19; 2) Tuvieron que mudarse temporal o permanentemente; 3) Recibió apoyo emocional y/o psicológico; y 4) Tiene un trabajo adicional.**
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+sitpanp <- region26 %>%
+  select(region,dp6_1:dp6_4) %>% 
+  gather(key="tipo",value="porcentp",2:5) %>% 
+  mutate(tipo = ifelse(tipo=="dp6_1","Hogar con Covid-19",
+                       ifelse(tipo=="dp6_2","Se tuvo que mudar",
+                              ifelse(tipo=="dp6_3","Recibió apoyo nemocional/psicológico","Tiene un trabajo adicional"))))
+
+sitpans <- region26 %>%
+  select(region,ds6_1:ds6_4) %>% 
+  gather(key="tipo",value="porcents",2:5) %>% 
+  mutate(tipo = ifelse(tipo=="ds6_1","Hogar con Covid-19",
+                       ifelse(tipo=="ds6_2","Se tuvo que mudar",
+                              ifelse(tipo=="ds6_3","Recibió apoyo nemocional/psicológico","Tiene un trabajo adicional"))))
+
+sitpan <- left_join(sitpanp,sitpans,by=c("region","tipo")) %>% 
+  mutate(tipo = factor(tipo,
+                       levels = c("Hogar con Covid-19",
+                                  "Se tuvo que mudar", 
+                                  "Recibió apoyo nemocional/psicológico",
+                                  "Tiene un trabajo adicional"), 
+                       labels = c("Hogar con Covid-19",
+                                  "Se tuvo que mudar", 
+                                  "Recibió apoyo \nemocional/psicológico",
+                                  "Tiene un trabajo adicional")))
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+
+inputPanel(
+  selectInput("y12_input",
+              label = "Indicador",
+              choices = c('Incidencia de diferentes situaciones relacionadas a la pandemia entre los docentes de primaria, (2021)' = "porcentp",
+                          'Incidencia de diferentes situaciones relacionadas a la pandemia entre los docentes de secundaria (2021)' = "porcents"
+              ),
+              selected = "porcentp"
+  )
+)
+
+renderPlot({
+  
+  ggplot(sitpan,aes_string(x ="region",
+                           y = (input$y12_input))) +
+    geom_bar(stat="identity",
+             fill="#2ca25f",
+             width = 0.8) +
+    facet_wrap(vars(tipo), 
+               scales="free", 
+               ncol = 4,
+               nrow=1) +
+    theme(strip.text.x = element_text(size = 15)) +
+    geom_text(aes(label=round(.data[[input$y12_input]],2),
+                  hjust=-0.1),
+              size=4.5)  +
+    theme_bw(base_size = 18) + 
+    scale_x_discrete(limits=rev) +
+    scale_y_continuous(limits=c(0, 100)) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=12)) +
+    coord_flip()
+  
+} , height = 550 , width = 1700)
+```
+
+Docente: Uso del tiempo
+==============================================
+
+Esta sección muestra información sobre el reporte de los docentes acerca del tiempo que dedican a actividades pedagógicas, administrativas, de atención y de trabajo colegiado. Los datos pertenecen a la Encuesta Nacional de Docentes (ENDO) 2021. La información presentada corresponde a los niveles educativos de primaria y secundaria. Las actividades cosideradas son: **1) tiempo dedicado a preparar las clases y labores administrativas; 2) tiempo dedicado a Retroalimentar y evaluar a los estudiantes; 3) tiempo dedicado a Atender a padres y madres de familia; 4) tiempo dedicado a Trabajar en equipo y de forma colegiada con sus colegas.**
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+#Preparar clases y labores administrativas
+utp1 <- region26 %>%
+  select(region,dp7_1:dp7_4) %>% 
+  gather(key = "tipo",value="ppro1",2:5) %>% 
+  mutate(tipo=ifelse(tipo=="dp7_1","No realiza",
+                     ifelse(tipo=="dp7_2","Menos de 1 hora",
+                            ifelse(tipo=="dp7_3","Entre 1 a 3 horas","Mas de 3 horas"))))
+
+#Retroalimentar y evaluar alumnos
+utp2 <- region26 %>%
+  select(region,dp8_1:dp8_4) %>% 
+  gather(key = "tipo",value="ppro2",2:5) %>% 
+  mutate(tipo=ifelse(tipo=="dp8_1","No realiza",
+                     ifelse(tipo=="dp8_2","Menos de 1 hora",
+                            ifelse(tipo=="dp8_3","Entre 1 a 3 horas","Mas de 3 horas"))))
+
+#Atender padres/madres de familia
+utp3 <- region26 %>%
+  select(region,dp9_1:dp9_4) %>% 
+  gather(key = "tipo",value="ppro3",2:5) %>% 
+  mutate(tipo=ifelse(tipo=="dp9_1","No realiza",
+                     ifelse(tipo=="dp9_2","Menos de 1 hora",
+                            ifelse(tipo=="dp9_3","Entre 1 a 3 horas","Mas de 3 horas"))))
+
+#Trabajo en equipo y de forma colegiada con colegas
+utp4 <- region26 %>%
+  select(region,dp10_1:dp10_4) %>% 
+  gather(key = "tipo",value="ppro4",2:5) %>% 
+  mutate(tipo=ifelse(tipo=="dp10_1","No realiza",
+                     ifelse(tipo=="dp10_2","Menos de 1 hora",
+                            ifelse(tipo=="dp10_3","Entre 1 a 3 horas","Mas de 3 horas"))))
+
+#Preparar clases y labores administrativas
+uts1 <- region26 %>%
+  select(region,ds7_1:ds7_4) %>% 
+  gather(key = "tipo",value="spro1",2:5) %>% 
+  mutate(tipo=ifelse(tipo=="ds7_1","No realiza",
+                     ifelse(tipo=="ds7_2","Menos de 1 hora",
+                            ifelse(tipo=="ds7_3","Entre 1 a 3 horas","Mas de 3 horas"))))
+
+#Retroalimentar y evaluar alumnos
+uts2 <- region26 %>%
+  select(region,ds8_1:ds8_4) %>% 
+  gather(key = "tipo",value="spro2",2:5) %>% 
+  mutate(tipo=ifelse(tipo=="ds8_1","No realiza",
+                     ifelse(tipo=="ds8_2","Menos de 1 hora",
+                            ifelse(tipo=="ds8_3","Entre 1 a 3 horas","Mas de 3 horas"))))
+
+#Atender padres/madres de familia
+uts3 <- region26 %>%
+  select(region,ds9_1:ds9_4) %>% 
+  gather(key = "tipo",value="spro3",2:5) %>% 
+  mutate(tipo=ifelse(tipo=="ds9_1","No realiza",
+                     ifelse(tipo=="ds9_2","Menos de 1 hora",
+                            ifelse(tipo=="ds9_3","Entre 1 a 3 horas","Mas de 3 horas"))))
+
+#Trabajo en equipo y de forma colegiada con colegas
+
+uts4 <- region26 %>%
+  select(region,ds10_1:ds10_4) %>% 
+  gather(key = "tipo",value="spro4",2:5) %>% 
+  mutate(tipo=ifelse(tipo=="ds10_1","No realiza",
+                     ifelse(tipo=="ds10_2","Menos de 1 hora",
+                            ifelse(tipo=="ds10_3","Entre 1 a 3 horas","Mas de 3 horas"))))
+
+usotiemp <- left_join(utp1,utp2,by=c("region","tipo")) %>% 
+  left_join(utp3,by=c("region","tipo")) %>% 
+  left_join(utp4,by=c("region","tipo")) %>% 
+  left_join(uts1,by=c("region","tipo")) %>% 
+  left_join(uts2,by=c("region","tipo")) %>% 
+  left_join(uts3,by=c("region","tipo")) %>% 
+  left_join(uts4,by=c("region","tipo")) %>% 
+  mutate(tipo = factor(tipo,
+                       levels = c("No realiza",
+                                  "Menos de 1 hora", 
+                                  "Entre 1 a 3 horas",
+                                  "Mas de 3 horas"), 
+                       labels = c("No realiza",
+                                  "Menos de 1 hora", 
+                                  "Entre 1 a 3 horas",
+                                  "Mas de 3 horas")))
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+
+inputPanel(
+  selectInput("y13_input",
+              label = "Indicador",
+              choices = c('Tiempo dedicado a preparar las clases y labores administrativas (primaria)' = "ppro1",
+                          'Tiempo dedicado a Retroalimentar y evaluar a los estudiantes (primaria)' = "ppro2",
+                          'Tiempo dedicado a Atender a padres y madres de familia (primaria)' = "ppro3",
+                          'Tiempo dedicado a Trabajar en equipo y de forma colegiada con sus colegas (primaria)' = "ppro4",
+                          'Tiempo dedicado a preparar las clases y labores administrativas, (secundaria)' = "spro1",
+                          'Tiempo dedicado a Retroalimentar y evaluar a los estudiantes (secundaria)' = "spro2",
+                          'Tiempo dedicado a Atender a padres y madres de familia (secundaria)' = "spro3",
+                          'Tiempo dedicado a Trabajar en equipo y de forma colegiada con sus colegas (secundaria)' = "spro4"
+              ),
+              selected = "ppro1"
+  )
+)
+
+renderPlot({
+  
+  ggplot(usotiemp,aes_string(x ="region",
+                             y = (input$y13_input))) +
+    geom_bar(stat="identity",
+             fill="#2ca25f",
+             width = 0.8) +
+    facet_wrap(vars(tipo), 
+               scales="free", 
+               ncol=4,
+               nrow=1) +
+    geom_text(aes(label=round(.data[[input$y13_input]],2),
+                  hjust=-0.1),
+              size=4.5)  +
+    theme_bw(base_size = 18) + 
+    scale_x_discrete(limits=rev) +
+    scale_y_continuous(limits=c(0, 100)) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=12)) +
+    coord_flip()
+  
+} , height = 550 , width = 1700)
+```
+
+Docente: Dificultades
+==============================================
+
+Esta sección muestra información sobre el reporte de los docentes acerca de las dificultades que afrontaron. Los datos pertenecen a la Encuesta Nacional de Docentes (ENDO) 2021. La información presentada corresponde a los niveles educativos de primaria y secundaria. Las situaciones cosideradas son: **1) tender los problemas socioemocionales de sus estudiante; 2) Coordinar y responder a la demanda de padres y madres de familia; 3) planificar actividades bajo el enfoque por competencias del Currículo Nacional; 4) Planificar la enseñanza de forma individual o colegiada; 5) Proponer e implementar innovaciones o buenas prácticas pedagógicas; 6) Realizar la evaluación diagnóstica y formativa; y 7) Virtualizar la enseñanza, adaptando y/o complementando las sesiones de “Aprendo en casa.**
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+#Difícil
+
+difp1 <- region26 %>%
+  select(region,dp11_1:dp11_7) %>%
+  gather(key = "tipo",value="ppro1",2:8) %>%
+  mutate(tipo=ifelse(tipo=="dp11_1","Planificar la enseñanza \nde forma individual o \ncolegiada",
+                     ifelse(tipo=="dp11_2","Planificar actividades bajo \nel enfoque por competencias \ndel Currículo Nacional",
+                            ifelse(tipo=="dp11_3","Realizar la evaluación \ndiagnóstica y formativa",
+                                   ifelse(tipo=="dp11_4","Virtualizar la enseñanza, \nadaptando y/o \ncomplementando las \nsesiones de \n“Aprendo en casa”",
+                                          ifelse(tipo=="dp11_5","Atender los problemas \nsocioemocionales de sus \nestudiantes",
+                                                 ifelse(tipo=="dp11_6","Coordinar y responder a \nla demanda de padres y \nmadres de familia","Proponer e implementar \ninnovaciones o buenas \nprácticas pedagógicas")))))))
+
+
+difs1 <- region26 %>%
+  select(region,ds11_1:ds11_7) %>%
+  gather(key = "tipo",value="spro1",2:8) %>%
+  mutate(tipo=ifelse(tipo=="ds11_1","Planificar la enseñanza \nde forma individual o \ncolegiada",
+                     ifelse(tipo=="ds11_2","Planificar actividades bajo \nel enfoque por competencias \ndel Currículo Nacional",
+                            ifelse(tipo=="ds11_3","Realizar la evaluación \ndiagnóstica y formativa",
+                                   ifelse(tipo=="ds11_4","Virtualizar la enseñanza, \nadaptando y/o \ncomplementando las \nsesiones de \n“Aprendo en casa”",
+                                          ifelse(tipo=="ds11_5","Atender los problemas \nsocioemocionales de sus \nestudiantes",
+                                                 ifelse(tipo=="ds11_6","Coordinar y responder a \nla demanda de padres y \nmadres de familia","Proponer e implementar \ninnovaciones o buenas \nprácticas pedagógicas")))))))
+
+
+dif <- left_join(difp1,difs1,by=c("region","tipo")) 
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+
+inputPanel(
+  selectInput("y14_input",
+              label = "Indicador",
+              choices = c('Dificultades primaria' = "ppro1",
+                          'Dificultades secundaria' = "spro1"
+              ),
+              selected = "ppro1"
+  )
+)
+
+renderPlot({
+  
+  ggplot(dif, aes_string(x ="region",
+                         y = input$y14_input)) +
+    geom_bar(stat="identity",
+             fill="#2ca25f",
+             width = 0.8) +
+    facet_wrap(vars(tipo), 
+               scales="free", 
+               ncol=7,
+               nrow=1) +
+    # theme(strip.text.x = element_text(size = 18)) +
+    geom_text(aes(label=round(.data[[input$y14_input]],2),
+                  hjust=-0.1),
+              size=4.0)  +
+    theme_bw(base_size = 14) + 
+    scale_x_discrete(limits=rev) +
+    scale_y_continuous(limits=c(0, 100)) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=12),
+          axis.text.y = element_text(20)) +
+    coord_flip()
+  
+} , height = 600 , width = 1700)
+```
+
+Docente: Innovación
+==============================================
+
+Esta sección muestra información sobre el reporte de los docentes acerca de las actividades de innovación que realizaron. Los datos pertenecen a la Encuesta Nacional de Docentes (ENDO) 2021. La información presentada corresponde a los niveles educativos de primaria y secundaria. Las actividades cosideradas son: **1) Realizó o participó de un proyecto de innovación y de una buena práctica pedagógica; 2) Realizó o participó solo de un proyecto de buena práctica pedagógica; y 3) realizó o participó solo en un proyecto de innovación** 
+
+```{r, message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+innovp <- region26 %>%
+  select(region,dp12_1:dp12_3) %>%
+  gather(key = "tipo",value="ppro1",2:4) %>%
+  mutate(tipo=ifelse(tipo=="dp12_1","Realizó o participó \nsolo en proyecto de \ninnovación",
+                     ifelse(tipo=="dp12_2","Realizó o participó \nde un proyecto de \ninnovación y de buena \npráctica pedagógica", "Realizó o participó \nsolo de un \nproyecto de buena \npráctica pedagógica")))
+
+
+innovs <- region26 %>%
+  select(region,ds12_1:ds12_3) %>%
+  gather(key = "tipo",value="spro1",2:4) %>%
+  mutate(tipo=ifelse(tipo=="ds12_1","Realizó o participó \nsolo en proyecto de \ninnovación",
+                     ifelse(tipo=="ds12_2","Realizó o participó \nde un proyecto de \ninnovación y de buena \npráctica pedagógica", "Realizó o participó \nsolo de un \nproyecto de buena \npráctica pedagógica")))
+
+innov <- left_join(innovp,innovs,by=c("region","tipo")) 
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=TRUE, echo=FALSE}
+
+inputPanel(
+  selectInput("y15_input",
+              label = "Indicador",
+              choices = c('Proporción de docentes de primaria que realiza actividades de innovación' = "ppro1",
+                          'Proporción de docentes de secundaria que realiza actividades de innovación' = "spro1"
+              ),
+              selected = "ppro1"
+  )
+)
+
+renderPlot({
+  
+  ggplot(innov, aes_string(x ="region",
+                           y = input$y15_input)) +
+    geom_bar(stat="identity",
+             fill="#2ca25f",
+             width = 0.8) +
+    facet_wrap(vars(tipo), 
+               scales="free", 
+               ncol=7,
+               nrow=1) +
+    geom_text(aes(label=round(.data[[input$y15_input]],2),
+                  hjust=-0.1),
+              size=4.5)  +
+    theme_bw(base_size = 18) + 
+    scale_x_discrete(limits=rev) +
+    scale_y_continuous(limits=c(0, 100)) +
+    theme(axis.title = element_blank()) +
+    theme(axis.text.x = element_text(size=12),
+          axis.text.y = element_text(20)) +
+    coord_flip()
+  
+} , height = 550 , width = 1000)
+```
+
+
+Rendimiento primaria
+==============================================
+
+Esta sección permite visualizar la relación entre el rendimiento **(eje Y)** y las variables presentadas previamente **(eje X)**.
+
+```{r}
+
+ejesx <- c('Porcentaje de IIEE privadas 2022 (Primaria) '= "tescpriv_p",
+           'Porcentaje de matrícula en escuelas privadas 2022 (Primaria) '= "tmatpriv_p",
+           'Porcentaje de IIEE rurales (2022)'="tescrural_p",
+           'Porcentaje de matrícula en IIEE rurales (2022)'="tmatrural_p",
+           'Ingreso real per capita 2021 (Soles)' = "eco1",
+           'Gasto real per capita 2021 (Soles)' = "eco2",
+           'PBI real per capita 2021 (Soles)' = "eco3",
+           'Ingreso promedio proveniente del trabajo 2020 (Soles)' = "eco4",
+           'Índice desarrollo humano (IDH) 2019' = "eco5",
+           'Incidencia de la pobreza, 2021 (%)' = "eco6",
+           'Cambio en pobreza 20/19' = "eco7",
+           'Reducción de pobreza 21/20' = "eco8",
+           'Índice global de hambre (IGH) 2021' = "eco9",
+           'Incidencia de pobreza multidimensional 2020' = "eco10",
+           'IIEE de nivel primaria con 3 servicios básicos (%), 2022' = "sb1",
+           'Total de IIEE de primaria con conexión a internet (%)' = "escint_p",
+           'Total de estudiantes de primaria con conexión a internet en sus hogares (%)' = "estint_p",
+           'Total de la brecha de infraestructura en primaria en millones de soles (2021)' = "bp1",
+           'Remuneración de otro personal (% del total), 2021' = "gas1",
+           'Remuneración de personal docente (% del total), 2021' = "gas2",
+           'Gasto en bienes, servicios y mantenimiento (% del total), 2021'= "gas3",
+           '% de centros poblados que cuenta con tecnología de internet movil de 4G, 2021' = "pit4g",
+           '% de centros poblados que cuenta a lo más con tecnología de internet movil de 3G, 2021' = "pit3g",
+           '% de centros poblados que cuenta a lo más con tecnología de internet movil de 2G, 2021'= "pit2g",
+           'Efectividad de la cobertura de Juntos, 2022' = "j1",
+           'Volumen de las transferencias de Juntos, 2022'= "j2",
+           'Total de IIEE que reciben Qaliwarma (primaria), 2022'="qp1",
+           'Total de estudiantes que reciben Qaliwarma (primaria), 2022'="qp2",
+           'Gasto por alumno en primaria (soles), 2021'="p1",
+           'Porcentaje de estudiantes repetidores en primaria (2021)'="cp1",
+           'Porcentaje de estudiantes con atraso escolar en primaria (2021)'="cp2",
+           'Ratio de alumnos por docente en primaria (2021)'="cp3",
+           'Tamaño promedio de clase en primaria (2021)'="cp4",
+           'Porcentaje de docentes hombres (primaria), 2021'="dp1",
+           'Porcentaje de docentes mujeres (primaria), 2021'="dp2",
+           'Promedio de edad de los docentes (primaria), 2021'="dp3",
+           'Porcentaje de docentes de primaria que reporta que en su hogar alguien enfermó de Covid-19 (2021)'="dp6_1",
+           'Porcentaje de docentes de primaria que tuvo que mudarse (2021)'="dp6_2",
+           'Porcentaje de docentes de primaria que recibió apoyo emocional y/o psicológico (2021)'="dp6_3",
+           'Porcentaje de docentes de primaria que reporta que tiene un trabajo adicional (2021)'="dp6_4",
+           'Porcentaje de docentes de primaria que dedicado entre 1 a 3 horas al día a preparar las clases y labores administrativas (2021)' ="dp7_3",
+           'Porcentaje de docentes de primaria que dedica más de 3 horas al día a preparar las clases y labores administrativas (2021)' ="dp7_4",
+           'Porcentaje de docentes de primaria que dedica entre 1 a 3 horas al día a retroalimentar y evaluar a estudiantes (2021)' ="dp8_3",
+           'Porcentaje de docentes de primaria que dedica más de 3 horas al día a retroalimentar y evaluar a estudiantes (2021)' ="dp8_4",
+           'Porcentaje de docentes de primaria que dedica entre 1 a 3 horas al día a atender PPFF (2021)' ="dp9_3",
+           'Porcentaje de docentes de primaria que dedica más de 3 horas al día a atender PPFF (2021)' ="dp9_4",
+           'Porcentaje de docentes de primaria que dedica entre 1 a 3 horas al día a trabajar en equipo y de forma colegiada (2021)' ="dp10_3",
+           'Porcentaje de docentes de primaria que dedica más de 3 horas al día a trabajar en equipo y de forma colegiada (2021)' ="dp10_4",
+           'Porcentaje de docentes de primaria que reporta dificultad para planificar la enseñanza de forma individual o colegiada (2021)' ="dp11_1", 
+           'Porcentaje de docentes de primaria que reporta dificultad para planificar actividades bajo el enfoque por competencias del Currículo Nacional (2021)' ="dp11_2",
+           'Porcentaje de docentes de primaria que reporta dificultad para realizar la evaluación diagnóstica y formativa (2021)' ="dp11_3",
+           'Porcentaje de docentes de primaria que reporta dificultad para virtualizar la enseñanza, adaptando y/o complementando las sesiones de “Aprendo en casa” (2021)' ="dp11_4",
+           'Porcentaje de docentes de primaria que reporta dificultad para atender los problemas socioemocionales de sus estudiantes (2021)' ="dp11_5",
+           'Porcentaje de docentes de primaria que reporta dificultad para coordinar y responder a la demanda de padres y madres de familia (2021)' ="dp11_6",
+           'Porcentaje de docentes de primaria que reporta dificultad para proponer e implementar innovaciones o buenas prácticas pedagógicas (2021)' ="dp11_7",
+           'Porcentaje de IIEE focalizadas con 100% de tablets (2022)'="tabl100_p",
+           'Porcentaje de IIEE con cuadernos de trabajo suficientes (2022)'="ct_p",
+           'Porcentaje de IIEE con kit de aprendizaje suficientes (2022)'="kit_p"
+)
+
+ejesy <- c('Rendimiento en Lectura \n4.° de primaria 2019'= 'mplect_4p_19',
+           'Rendimiento en Matemática \n4.° de primaria 2019'= 'mpmat_4p_19'
+)
+
+```
+
+```{r}
+
+inputPanel(
+  selectInput(inputId = "VarX",
+              label = "Indicador de eje X",
+              choices = ejesx,
+              selected = "tescpriv_p"
+  ),
+  selectInput(inputId = "VarY",
+              label = "Indicador de eje Y",
+              choices = ejesy,
+              selected = "mplect_2s_19"
+  )
+)
+
+renderPlotly({
+  
+  p1<-
+    ggplot(region26, aes_string(x =input$VarX,
+                                y = input$VarY,
+                                text=c(factor(region26$region)))) +
+    geom_point(size=2.5, aes(color=regnatural)) +
+    scale_color_manual(values=c("#fdae61", 
+                                "#543005", 
+                                "#4d9221")) +
+    geom_smooth(method="loess", formula = y~x) +
+    labs(x = names(ejesx[which(ejesx == input$VarX)]),
+         y = names(ejesy[which(ejesy == input$VarY)])) +
+    scale_y_continuous(limits=c(350, 580),
+                       n.breaks=6) +
+    scale_x_continuous(n.breaks=9) +
+    theme(axis.text=element_text(size=10),
+          axis.line = element_line(colour = "black")) +
+    theme_bw(base_size = 12)
+  
+  ggplotly(p1,
+           tooltip = c("text"),
+           width = 1100,
+           height = 550) %>% 
+    layout(legend = list(title = list(text = "<b>Regiones \nnaturales</b>")))
+  
+  
+})
+
+```
+
+Rendimiento secundaria
+==============================================
+
+Esta sección permite visualizar la relación entre el rendimiento **(eje Y)** y las variables presentadas previamente **(eje X)**.
+
+```{r}
+
+ejesx <- c('Porcentaje de IIEE privadas 2022 (Secundaria) '= "tescpriv_s",
+           'Porcentaje de matrícula en escuelas privadas 2022 (Secundaria) '= "tmatpriv_s",
+           'Porcentaje de IIEE rurales (2022)'="tescrural_s",
+           'Porcentaje de matrícula en IIEE rurales (2022)'="tmatrural_s",
+           'Ingreso real per capita 2021 (Soles)' = "eco1",
+           'Gasto real per capita 2021 (Soles)' = "eco2",
+           'PBI real per capita 2021 (Soles)' = "eco3",
+           'Ingreso promedio proveniente del trabajo 2020 (Soles)' = "eco4",
+           'Índice desarrollo humano (IDH) 2019' = "eco5",
+           'Incidencia de la pobreza, 2021 (%)' = "eco6",
+           'Cambio en pobreza 20/19' = "eco7",
+           'Reducción de pobreza 21/20' = "eco8",
+           'Índice global de hambre (IGH) 2021' = "eco9",
+           'Incidencia de pobreza multidimensional 2020' = "eco10",
+           'IIEE de nivel secundaria con 3 servicios básicos (%), 2022' = "sb2",
+           'Total de IIEE de secundaria con conexión a internet (%)' = "escint_s",
+           'Total de estudiantes de secundaria con conexión a internet en sus hogares (%)' = "estint_s",
+           'Total de la brecha de infraestructura en secundaria en millones de soles (2021)' = "bs1",
+           'Remuneración de otro personal (% del total), 2021' = "gas1",
+           'Remuneración de personal docente (% del total), 2021' = "gas2",
+           'Gasto en bienes, servicios y mantenimiento (% del total) (2021)'= "gas3",
+           '% de centros poblados que cuenta con tecnología de internet movil de 4G (2021)' = "pit4g",
+           '% de centros poblados que cuenta a lo más con tecnología de internet movil de 3G (2021)' = "pit3g",
+           '% de centros poblados que cuenta a lo más con tecnología de internet movil de 2G (2021)'= "pit2g",
+           'Efectividad de la cobertura de Juntos, 2022' = "j1",
+           'Volumen de las transferencias de Juntos,2022'= "j2",
+           'Total de IIEE que reciben Qaliwarma, 2022'="qs1",
+           'Total de estudiantes que reciben Qaliwarma, 2022'="qs2",
+           'Gasto por alumno en secundaria (soles), 2021'="s1",
+           'Porcentaje de estudiantes repetidores, 2021'="cs1",
+           'Porcentaje de estudiantes con atraso escolar, 2021'="cs2",
+           'Ratio de alumnos por docente, 2021'="cs3",
+           'Porcentaje de docentes hombres, 2021'="ds1",
+           'Porcentaje de docentes mujeres, 2021'="ds2",
+           'Promedio de edad de los docentes, 2021'="ds3",
+           'Porcentaje de docentes de secundaria que reporta que en su hogar alguien enfermó de Covid-19 (2021)'="ds6_1",
+           'Porcentaje de docentes de secundaria que tuvo que mudarse (2021)'="ds6_2",
+           'Porcentaje de docentes de secundaria que recibió apoyo emocional y/o psicológico (2021)'="ds6_3",
+           'Porcentaje de docentes de secundaria que reporta que tiene un trabajo adicional (2021)'="ds6_4",
+           'Porcentaje de docentes de secundaria que dedicado entre 1 a 3 horas al día a preparar las clases y labores administrativas (2021)' ="ds7_3",
+           'Porcentaje de docentes de secundaria que dedica más de 3 horas al día a preparar las clases y labores administrativas (2021)' ="ds7_4",
+           'Porcentaje de docentes de secundaria que dedica entre 1 a 3 horas al día a retroalimentar y evaluar a estudiantes (2021)' ="ds8_3",
+           'Porcentaje de docentes de secundaria que dedica más de 3 horas al día a retroalimentar y evaluar a estudiantes (2021)' ="ds8_4",
+           'Porcentaje de docentes de secundaria que dedica entre 1 a 3 horas al día a atender PPFF (2021)' ="ds9_3",
+           'Porcentaje de docentes de secundaria que dedica más de 3 horas al día a atender PPFF (2021)' ="ds9_4",
+           'Porcentaje de docentes de secundaria que dedica entre 1 a 3 horas al día a trabajar en equipo y de forma colegiada (2021)' ="ds10_3",
+           'Porcentaje de docentes de secundaria que dedica más de 3 horas al día a trabajar en equipo y de forma colegiada (2021)' ="ds10_4",
+           'Porcentaje de docentes de secundaria que reporta dificultad para planificar la enseñanza de forma individual o colegiada (2021)' ="ds11_1",
+           'Porcentaje de docentes de secundaria que reporta dificultad para planificar actividades bajo el enfoque por competencias del Currículo Nacional (2021)' ="ds11_2",
+           'Porcentaje de docentes de secundaria que reporta dificultad para realizar la evaluación diagnóstica y formativa (2021)' ="ds11_3",
+           'Porcentaje de docentes de secundaria que reporta dificultad para virtualizar la enseñanza, adaptando y/o complementando las sesiones de “Aprendo en casa” (2021)' ="ds11_4",
+           'Porcentaje de docentes de secundaria que reporta dificultad para atender los problemas socioemocionales de sus estudiantes (2021)' ="ds11_5",
+           'Porcentaje de docentes de secundaria que reporta dificultad para coordinar y responder a la demanda de padres y madres de familia (2021)' ="ds11_6",
+           'Porcentaje de docentes de secundaria que reporta dificultad para proponer e implementar innovaciones o buenas prácticas pedagógicas (2021)' ="ds11_7",
+           'Porcentaje de docentes de primaria que reporta dificultad para proponer e implementar innovaciones o buenas prácticas pedagógicas (2021) ' ="dp11_7",
+           'Porcentaje de IIEE focalizadas con 100% de tablets (2022)'="tabl100_s",
+           'Porcentaje de IIEE con cuadernos de trabajo suficientes (2022)'="ct_s",
+           'Porcentaje de IIEE con kit de aprendizaje suficientes (2022)'="kit_s"
+)
+
+ejesy <- c('Rendimiento en Lectura \n2.° de secundaria 2019'= 'mplect_2s_19',
+           'Rendimiento en Matemática \n2.° de secundaria 2019'= 'mpmat_2s_19'
+           # 'Rendimiento en Lectura \n2.° grado de secundaria 2022'= 'lect22'
+)
+
+```
+
+```{r}
+
+inputPanel(
+  selectInput(inputId = "VarX_S",
+              label = "Indicador de eje X",
+              choices = ejesx,
+              selected = "tescpriv_s"
+  ),
+  selectInput(inputId = "VarY_S",
+              label = "Indicador de eje Y",
+              choices = ejesy,
+              selected = "mplect_2s_19"
+  )
+)
+
+renderPlotly({
+  
+  p1<-
+    ggplot(region26, aes_string(x =input$VarX_S,
+                                y = input$VarY_S,
+                                text=c(factor(region26$region)))) +
+    geom_point(size=2.5, aes(color=regnatural)) +
+    scale_color_manual(values=c("#fdae61", 
+                                "#543005", 
+                                "#4d9221")) +
+    geom_smooth(method="loess", formula = y~x) +
+    labs(x = names(ejesx[which(ejesx == input$VarX_S)]),
+         y = names(ejesy[which(ejesy == input$VarY_S)])) +
+    scale_y_continuous(limits=c(450, 650),
+                       n.breaks=6) +
+    scale_x_continuous(n.breaks=9) +
+    theme(axis.text=element_text(size=10),
+          axis.line = element_line(colour = "black")) +
+    theme_bw(base_size = 12)
+  
+  ggplotly(p1,
+           tooltip = c("text"),
+           width = 1100,
+           height = 550) %>% 
+    layout(legend = list(title = list(text = "<b>Regiones \nnaturales</b>")))
+  
+  
+})
+
+```
